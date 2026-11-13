@@ -5,6 +5,7 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import org.yawlfoundation.yawl.elements.data.YParameter;
 import org.yawlfoundation.yawl.engine.YSpecificationID;
 import org.yawlfoundation.yawl.engine.interfce.SpecificationData;
+import org.yawlfoundation.yawl.resourcing.jsf.dynForm;
 import org.yawlfoundation.yawl.resourcing.rsInterface.ResourceGatewayException;
 import org.yawlfoundation.yawl.ui.announce.Announcement;
 import org.yawlfoundation.yawl.ui.dialog.DelayedStartDialog;
@@ -14,6 +15,7 @@ import org.yawlfoundation.yawl.ui.dynform.DynForm;
 import org.yawlfoundation.yawl.ui.listener.DelayedCaseLaunchedListener;
 import org.yawlfoundation.yawl.ui.menu.ActionIcon;
 import org.yawlfoundation.yawl.ui.menu.ActionRibbon;
+import org.yawlfoundation.yawl.ui.util.TNode;
 import org.yawlfoundation.yawl.ui.util.UiUtil;
 
 import java.io.IOException;
@@ -76,10 +78,10 @@ public class SpecificationsSubView extends AbstractGridView<SpecificationData> {
             showInfo(item);
             ribbon.reset();
         });
-        ribbon.add(VaadinIcon.DOWNLOAD_ALT, "Download log", event -> {
-            downloadLog(item);
-            ribbon.reset();
-         });
+        ribbon.addDownloadAction(
+                () -> String.format("%s_v%s.xes", item.getSpecURI(), item.getSpecVersion()),
+                "Download Log", () -> getLogContent(item),
+                () -> Announcement.success("XES log downloaded"));
         ribbon.add(VaadinIcon.CLOSE_SMALL, ActionIcon.RED, "Unload", event -> {
             if (unloadSpecification(item)) {
                 refresh();
@@ -148,7 +150,10 @@ public class SpecificationsSubView extends AbstractGridView<SpecificationData> {
                             long delay)
             throws ResourceGatewayException, IOException {
         String schema = getResourceClient().getCaseParamsDataSchema(spec.getID());
-        DynForm dynForm = new DynForm(inputParams, schema);
+//        Map<String, Map<String, String>> internalTypeMap = getInternalTypeMap(spec.getID());
+        TNode typeTree = getInternalTypeTree(spec.getID());
+
+        DynForm dynForm = new DynForm(inputParams, schema, typeTree);
         dynForm.addOkListener(e -> {
             if (dynForm.validate()) {
                 String caseData = dynForm.generateOutputData();
@@ -246,30 +251,23 @@ public class SpecificationsSubView extends AbstractGridView<SpecificationData> {
     }
 
 
-    private void downloadLog(SpecificationData specData) {
+    private String getLogContent(SpecificationData specData) {
         try {
             String log = getResourceClient().getMergedXESLog(
                     specData.getID(), true);
             if (log.isEmpty()) {
                 Announcement.highlight("No cases for selected specification");
-                return;
+                return null;
             }
-
-            String fileName = String.format("%s_v%s.xes", specData.getSpecURI(),
-                                        specData.getSpecVersion());
-
-            // file download doesn't work from this (inner) view, so we need to call it
-            // from the parent (outer) view
-            _parent.downloadFile(fileName, log);
-
-            Announcement.success("XES log downloaded");
+            return log;
         }
         catch (IOException ioe) {
             announceError(ioe.getMessage());
         }
+        return null;
     }
 
-
+    
     private void announceDelayedCaseLaunch(long delay) {
         _listeners.forEach(l -> l.delayedCaseLaunched(delay + 1000));
     }

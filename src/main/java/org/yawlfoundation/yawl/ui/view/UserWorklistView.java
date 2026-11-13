@@ -6,6 +6,7 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import org.jdom2.Element;
 import org.yawlfoundation.yawl.elements.data.YParameter;
+import org.yawlfoundation.yawl.engine.YSpecificationID;
 import org.yawlfoundation.yawl.engine.interfce.TaskInformation;
 import org.yawlfoundation.yawl.engine.interfce.WorkItemRecord;
 import org.yawlfoundation.yawl.resourcing.QueueSet;
@@ -24,6 +25,7 @@ import org.yawlfoundation.yawl.ui.menu.ActionRibbon;
 import org.yawlfoundation.yawl.ui.service.ChainedCase;
 import org.yawlfoundation.yawl.ui.service.PiledTask;
 import org.yawlfoundation.yawl.ui.util.InstalledServices;
+import org.yawlfoundation.yawl.ui.util.TNode;
 import org.yawlfoundation.yawl.util.JDOMUtil;
 import org.yawlfoundation.yawl.util.StringUtil;
 
@@ -40,6 +42,7 @@ import java.util.Set;
 public class UserWorklistView extends AbstractWorklistView {
 
     private final CustomFormLauncher _customFormLauncher;
+    private final MainView _mainView;
 
     private ActionIcon _chainedIcon;
     private ActionIcon _piledIcon;
@@ -47,9 +50,10 @@ public class UserWorklistView extends AbstractWorklistView {
     private ContextMenu _piledList;
 
 
-    public UserWorklistView(Participant p, String customFormHandle) {
+    public UserWorklistView(Participant p, String customFormHandle, MainView view) {
         super(p);
         _customFormLauncher = new CustomFormLauncher(customFormHandle);
+        _mainView = view;
     }
 
 
@@ -189,8 +193,13 @@ public class UserWorklistView extends AbstractWorklistView {
     private void createOfferedRibbon(WorkItemRecord wir, ActionRibbon ribbon, boolean hasWorklets) {
         ribbon.add(VaadinIcon.CHECK,"Accept",
                 e -> performAction(Action.Accept, wir));
-        ribbon.add(VaadinIcon.CARET_RIGHT, ActionIcon.GREEN,"Accept & Start",
-                e -> acceptAndStart(wir));
+        if (userMayStart(wir)) {
+            ribbon.add(VaadinIcon.CARET_RIGHT, ActionIcon.GREEN, "Accept & Start",
+                    e -> acceptAndStart(wir));
+        }
+        else {
+            ribbon.add(VaadinIcon.CARET_RIGHT);
+        }
 
         ContextMenu menu = addContextMenu(ribbon);
         if (userMayChain(wir)) {
@@ -450,27 +459,47 @@ public class UserWorklistView extends AbstractWorklistView {
                 Announcement.warn("Missing or invalid custom form, defaulting to dynamic form");
             }
             String schema = getResourceClient().getWorkItemDataSchema(wir.getID());
-            DynForm dynForm = new DynForm(getParticipant(), wir, schema);
+//            Map<String, Map<String, String>> geoTypes = getInternalTypeMap(
+//                    new YSpecificationID(wir));
+
+            TNode typeTree = getInternalTypeTree(new YSpecificationID(wir));
+
+            DynForm dynForm = new DynForm(getParticipant(), wir, schema, typeTree);
             dynForm.addOkListener(e -> {
                 if (dynForm.validate()) {                                // completion
                     String outputData = dynForm.generateOutputData();
                     completeItem(wir, outputData);
-                    dynForm.close();
+                    if (dynForm.hasGeoMap()) {
+                        _mainView.closeGeoFormView();
+                    }
+                    else {
+                        dynForm.close();
+                    }
                     refresh();
                 }
             });
-            dynForm.addSaveListener(e -> {
-           //     if (dynForm.validate()) {                                // save
-                    String outputData = dynForm.generateOutputData();
-                    saveWorkItemData(wir, outputData);
+            dynForm.addSaveListener(e -> {           // save
+                String outputData = dynForm.generateOutputData();
+                saveWorkItemData(wir, outputData);
+                if (dynForm.hasGeoMap()) {
+                    _mainView.closeGeoFormView();
+                }
+                else {
                     dynForm.close();
-                    refresh();
-            //    }
+                }
+                refresh();
             });
-
-            dynForm.open();
+            if (dynForm.hasGeoMap()) {
+                dynForm.removeShortcutKey();
+                dynForm.addCancelListener(e -> _mainView.closeGeoFormView());
+                _mainView.showGeoFormView(dynForm);
+            }
+            else {
+                dynForm.open();
+            }
         }
         catch (ResourceGatewayException | IOException e) {
+            _mainView.closeGeoFormView();
             throw new RuntimeException(e);
         }
     }

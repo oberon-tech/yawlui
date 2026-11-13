@@ -10,8 +10,10 @@ import org.yawlfoundation.yawl.engine.interfce.WorkItemRecord;
 import org.yawlfoundation.yawl.resourcing.resource.Participant;
 import org.yawlfoundation.yawl.ui.announce.Announcement;
 import org.yawlfoundation.yawl.ui.dialog.AbstractDialog;
+import org.yawlfoundation.yawl.ui.listener.DynFormContentChangeListener;
 import org.yawlfoundation.yawl.ui.service.Clients;
 import org.yawlfoundation.yawl.ui.util.ApplicationProperties;
+import org.yawlfoundation.yawl.ui.util.TNode;
 import org.yawlfoundation.yawl.ui.util.UiUtil;
 
 import java.io.IOException;
@@ -25,22 +27,25 @@ public class DynForm extends AbstractDialog {
 
     private Button _okButton;  // 'Complete' or 'Start'
     private Button _saveButton;
-    private final Button _cancelButton = new Button("Cancel", event -> cancelform());
+    private final Button _cancelButton = new Button("Cancel", event -> cancelForm());
 
     private final DynFormFactory _factory = new DynFormFactory();
 
+    private DynFormLayout _dynFormLayout; // the content container of this form's components
+    private Scroller _containingScroller; // the outer scroll component
+    private ShortcutRegistration _registeredShortcutKey;
 
     // work item edit
-    public DynForm(Participant p, WorkItemRecord wir, String schema) {
+    public DynForm(Participant p, WorkItemRecord wir, String schema, TNode typeTree) {
         super();
-        createContent(p, wir, schema);
+        createContent(p, wir, schema, typeTree);
     }
 
 
     // case start
-    public DynForm(List<YParameter> parameters, String schema) {
+    public DynForm(List<YParameter> parameters, String schema, TNode typeTree) {
         super();
-        createContent(parameters, schema);
+        createContent(parameters, schema, typeTree);
     }
 
 
@@ -53,6 +58,12 @@ public class DynForm extends AbstractDialog {
         _saveButton.addClickListener(listener);
     }
 
+
+    public void addCancelListener(ComponentEventListener<ClickEvent<Button>> listener) {
+        _cancelButton.addClickListener(listener);
+    }
+
+
     public boolean validate() {
         return _factory.validate();
     }
@@ -63,10 +74,37 @@ public class DynForm extends AbstractDialog {
     }
 
 
-    private void createContent(Participant p, WorkItemRecord wir, String schema) {
+    public boolean containsGeoType() {
+        return _dynFormLayout.hasGeoTypeInTree();
+    }
+
+
+    public boolean hasGeoMap() {
+        return _dynFormLayout.containsVisibleGeoMapComponentInTree();
+    }
+
+
+    public void addGeoTypeChangeListener(DynFormContentChangeListener listener) {
+        _dynFormLayout.addGeoTypeChangeListenerToTree(listener);
+    }
+
+    
+    public Scroller getContainingScroller() {
+        return _containingScroller;
+    }
+
+    public String getFormName() { return _factory.getFormName(); }
+
+    public List<SubPanel> getSubPanels() {
+        return _dynFormLayout.getChildSubPanels();
+    }
+
+
+    private void createContent(Participant p, WorkItemRecord wir, String schema,
+                               TNode typeTree) {
         try {
-            DynFormLayout form = _factory.createForm(schema, wir, p);
-            configureForm(form, "Edit Work Item");
+            _dynFormLayout = _factory.createForm(schema, wir, p, typeTree);
+            configureForm(_dynFormLayout, "Edit Work Item");
             createButtonsForWorkItem();
         }
         catch (DynFormException dfe) {
@@ -75,10 +113,11 @@ public class DynForm extends AbstractDialog {
     }
 
 
-    private void createContent(List<YParameter> parameters, String schema) {
+    private void createContent(List<YParameter> parameters, String schema,
+                               TNode typeTree) {
         try {
-            DynFormLayout form = _factory.createForm(schema, parameters, null);
-            configureForm(form, "Case Start");
+            _dynFormLayout = _factory.createForm(schema, parameters, null, typeTree);
+            configureForm(_dynFormLayout, "Case Start");
             createButtonsForCaseStart();
         }
         catch (DynFormException dfe) {
@@ -94,6 +133,7 @@ public class DynForm extends AbstractDialog {
         addFormName();
         addComponent(createScroller(form));
         applyUserDefinedStyles(form);
+        form.applyInternalTypeReference();
         UiUtil.setFocus(form);
     }
 
@@ -123,22 +163,30 @@ public class DynForm extends AbstractDialog {
     private void assignShortcutKey() {
         DynFormEnterKeyAction action = ApplicationProperties.getDynFormEnterKeyAction();
         if (action == DynFormEnterKeyAction.SAVE && _saveButton != null) {
-            _saveButton.addClickShortcut(Key.ENTER);
+            _registeredShortcutKey = _saveButton.addClickShortcut(Key.ENTER);
         }
         else if (! (action == DynFormEnterKeyAction.NONE)) {
-            _okButton.addClickShortcut(Key.ENTER);
+            _registeredShortcutKey = _okButton.addClickShortcut(Key.ENTER);
         }
     }
 
-    private Scroller createScroller(Component form) {
-        Scroller scroller = new Scroller(form);
-        scroller.setScrollDirection(Scroller.ScrollDirection.VERTICAL);
-        scroller.getStyle().set("border-bottom", "1px solid var(--lumo-contrast-20pct)");
-        return scroller;
+
+    public void removeShortcutKey() {
+        _registeredShortcutKey.remove();
     }
 
     
+    private Scroller createScroller(Component form) {
+        _containingScroller = new Scroller(form);
+        _containingScroller.setScrollDirection(Scroller.ScrollDirection.VERTICAL);
+        _containingScroller.getStyle().set("border-bottom", "1px solid var(--lumo-contrast-20pct)");
+        if (hasGeoMap()) {
+            _containingScroller.getStyle().set("height", "100%");
+        }
+        return _containingScroller;
+    }
 
+    
     private void setFormHeight(DynFormLayout form) {
         UI.getCurrent().getPage().retrieveExtendedClientDetails(details ->
             form.setAppropriateHeight(details.getWindowInnerHeight()));
@@ -166,9 +214,11 @@ public class DynForm extends AbstractDialog {
     }
 
 
-    private void cancelform() {
+    public void cancelForm() {
         removeDocsOnCancel();
-        close();
+        if (! hasGeoMap()) {
+            close();
+        }
     }
 
 

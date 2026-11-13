@@ -64,10 +64,9 @@ public class DynFormComponentBuilder {
 
 
     public SubPanel makeSubPanel(DynFormField field, SubPanelController controller) {
-        String name = field.getName();
-        SubPanel subPanel = new SubPanel(_factory, name);
+        SubPanel subPanel = new SubPanel(_factory, field);
         if ((! field.isChoiceField()) && field.isFieldContainer()) {
-            subPanel.addHeader(makeHeaderText(field.getLabel(), name));
+            subPanel.addHeader(makeHeaderText(field.getLabel(), field.getName()));
         }
         if (controller != null) {
             controller.storeSubPanel(subPanel);
@@ -109,7 +108,7 @@ public class DynFormComponentBuilder {
             else if (type.equals("dateTime")) {
                 field = makeDateTimePicker(input);
             }
-            else if (type.equals("YDocumentType")) {
+            else if (input.isYDocument()) {
                 field = makeDocumentField(input);
             }
             else if (input.hasEnumeratedValues()) {
@@ -381,8 +380,8 @@ public class DynFormComponentBuilder {
 
     private Hr makeHLine() {
         Hr hr = new Hr();
-        setStyles(hr, Map.of("background-color", "blue","flex", "0 0 2px",
-                "align-self", "stretch"));
+        setStyles(hr, Map.of("margin-left", "0px","margin-right", "0",
+                "height", "3px", "width", "calc(99.9% + 0rem)"));
         return hr;
     }
 

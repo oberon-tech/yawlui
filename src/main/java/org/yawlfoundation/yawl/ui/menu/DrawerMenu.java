@@ -23,8 +23,7 @@ public class DrawerMenu extends Tabs {
         addItems(p);
     }
 
-
-
+    
     public void insertWorkletItem() {
         int insertionIndex = getComponentCount() - 2;
         this.addComponentAtIndex(insertionIndex,
@@ -62,6 +61,7 @@ public class DrawerMenu extends Tabs {
             add(createTab(VaadinIcon.GROUP, "Org Data"));
             add(createTab(VaadinIcon.CLUSTER, "Non-Human Resources"));
             add(createTab(VaadinIcon.LINK, "Services / Clients"));
+            add(createTab(VaadinIcon.GRID, "Log Viewer"));
             add(createTab(VaadinIcon.CALENDAR_CLOCK, "Calendar"));
             if (new InstalledServices().hasWorkletService()) {
                 add(createTab(VaadinIcon.WRENCH, "Worklet Admin"));

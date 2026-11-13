@@ -7,21 +7,22 @@ import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Image;
-import com.vaadin.flow.component.html.Label;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.login.AbstractLogin;
 import com.vaadin.flow.component.login.LoginForm;
 import com.vaadin.flow.component.login.LoginI18n;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.page.AppShellConfigurator;
-import com.vaadin.flow.component.page.Inline;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.HasDynamicTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.AppShellSettings;
-import com.vaadin.flow.theme.Theme;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.yawlfoundation.yawl.elements.YAWLServiceReference;
 import org.yawlfoundation.yawl.engine.interfce.ServletUtils;
 import org.yawlfoundation.yawl.engine.interfce.WorkItemRecord;
@@ -29,17 +30,13 @@ import org.yawlfoundation.yawl.resourcing.WorkQueue;
 import org.yawlfoundation.yawl.resourcing.resource.Participant;
 import org.yawlfoundation.yawl.resourcing.resource.UserPrivileges;
 import org.yawlfoundation.yawl.resourcing.rsInterface.ResourceGatewayException;
+import org.yawlfoundation.yawl.ui.dynform.DynForm;
 import org.yawlfoundation.yawl.ui.menu.ActionIcon;
 import org.yawlfoundation.yawl.ui.menu.DrawerMenu;
 import org.yawlfoundation.yawl.ui.service.Clients;
 import org.yawlfoundation.yawl.ui.service.ResourceClient;
 import org.yawlfoundation.yawl.ui.util.BuildInformation;
 
-import javax.servlet.ServletException;
-import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.security.NoSuchAlgorithmException;
@@ -48,30 +45,19 @@ import java.util.Map;
 import java.util.Set;
 
 @Route("")
-//@PWA(name = "Project Base for Vaadin", shortName = "Project Base", enableInstallPrompt = false)
 @JsModule("@vaadin/vaadin-lumo-styles/presets/compact.js")
-@Theme("common-theme")
 public class MainView extends AppLayout implements HasDynamicTitle,
-        ComponentEventListener<Tabs.SelectedChangeEvent>, AppShellConfigurator {
+        ComponentEventListener<Tabs.SelectedChangeEvent> {
 
     private static final Map<Participant, String> _customFormHandleMap = new HashMap<>();
 
     private Participant _user;
-    private Div _footer;
-
-
+    private boolean _isDrawerOpen = false;
+    private final DrawerToggle _menuIcon = new DrawerToggle();
     
     public MainView() {
         super();
         showLoginForm();
-    }
-
-
-    // called on startup to set the app's favicon
-    @Override
-    public void configurePage(AppShellSettings settings) {
-        settings.addFavIcon(Inline.Position.PREPEND,
-                "icon", "icons/favicon.png", "32x32");
     }
 
 
@@ -88,7 +74,7 @@ public class MainView extends AppLayout implements HasDynamicTitle,
         if (tab == null) return;               // tab is null when user first logs on only
         switch (tab.getLabel()) {
             case "My Worklist" : setContent(new UserWorklistView(_user,
-                    getCustomformHandle(_user))); break;
+                    getCustomformHandle(_user), this)); break;
             case "My Profile" : setContent(new ProfileView(_user)); break;
             case "My Team's Worklist" : setContent(chooseGroupView()); break;
             case "Case Mgt" : setContent(new CasesView()); break;
@@ -97,6 +83,7 @@ public class MainView extends AppLayout implements HasDynamicTitle,
             case "Org Data" : setContent(new OrgDataView()); break;
             case "Non-Human Resources" : setContent(new NonHumanResourcesView()); break;
             case "Services / Clients" : setContent(new ServicesView()); break;
+            case "Log Viewer" : setContent(new LogView()); break;
             case "Calendar" : setContent(new CalendarView(_user)); break;
             case "Worklet Admin" : setContent(new WorkletAdminView()); break;
             case "About" : setContent(new AboutView()); break;
@@ -105,16 +92,38 @@ public class MainView extends AppLayout implements HasDynamicTitle,
     }
 
 
+    public void showGeoFormView(DynForm dynForm) {
+        _isDrawerOpen = isDrawerOpened();
+        setDrawerOpened(false);
+        _menuIcon.setEnabled(false);
+        setContent(new GeoFormView(dynForm));
+    }
+
+
+    public void closeGeoFormView() {
+        setContent(new UserWorklistView(_user, getCustomformHandle(_user), this));
+        setDrawerOpened(_isDrawerOpen);
+        _menuIcon.setEnabled(true);
+    }
+
+    
     private void showLoginForm() {
         VerticalLayout layout = new VerticalLayout();
         layout.setAlignItems(FlexComponent.Alignment.CENTER);
         layout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
-        Image logo = new Image("icons/logo5.png", "YAWL Logo");
+        Image logo = new Image("icons/logo5unversioned.png", "YAWL Logo");
         logo.setWidth("370px");
         layout.add(logo);
 
+        Span version = new Span("version " + new BuildInformation().getUIProperties().version);
+        version.getStyle().set("color", "gray");
+        version.getStyle().set("font-size", "12px");
+        version.getStyle().set("font-style", "italic");
+        version.getStyle().set("text-align", "right");
+        layout.add(version);
+
         LoginI18n i18n = LoginI18n.createDefault();
-        i18n.getForm().setTitle(null);
+        i18n.getForm().setTitle("");
         LoginForm login = new LoginForm(i18n);
         login.setForgotPasswordButtonVisible(false);
         login.addLoginListener(e -> authenticate(e, login));
@@ -139,6 +148,8 @@ public class MainView extends AppLayout implements HasDynamicTitle,
                 }
                 createTitleBar(username);
                 DrawerMenu menu = createMenuBar();
+                setDrawerOpened(true);
+                _menuIcon.setEnabled(true);
                 addWorkletServiceChangeListener(menu);
             }
             else {
@@ -175,7 +186,7 @@ public class MainView extends AppLayout implements HasDynamicTitle,
 
 
     private void createTitleBar(String userName) {
-        addToNavbar(new DrawerToggle());
+        addToNavbar(_menuIcon);
         addLogo();
         addLogout(userName);
     }
@@ -185,7 +196,7 @@ public class MainView extends AppLayout implements HasDynamicTitle,
         DrawerMenu menu = new DrawerMenu(_user);
         menu.addSelectedChangeListener(this);
         addToDrawer(menu);
-        menu.selectInitialItem();
+        menu.selectInitialItem();  
         return menu;
     }
 
@@ -204,7 +215,7 @@ public class MainView extends AppLayout implements HasDynamicTitle,
     // add a logout 'button' on the right side of the nav bar
     private void addLogout(String userName) {
         Div div = new Div();
-        Label userLabel = new Label(userName);
+        Span userLabel = new Span(userName);
         userLabel.getStyle().set("padding-right", "15px");
         ActionIcon logout = new ActionIcon(VaadinIcon.SIGN_OUT_ALT, null,
                 "Logout", e -> exit());

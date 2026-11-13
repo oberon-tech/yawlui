@@ -27,11 +27,20 @@ public class EngineClient extends AbstractClient {
 
     public EngineClient() {
         super();
-        String host = ApplicationProperties.getEngineHost();
-        String port = ApplicationProperties.getEnginePort();
-        _iaClient = new InterfaceA_EnvironmentBasedClient(buildURI(host, port, "yawl/ia"));
-        _ibClient = new InterfaceB_EnvironmentBasedClient(buildURI(host, port, "yawl/ib"));
+        _iaClient = new InterfaceA_EnvironmentBasedClient(buildURI(getHost(), getPort(), "yawl/ia"));
+        _ibClient = new InterfaceB_EnvironmentBasedClient(buildURI(getHost(), getPort(), "yawl/ib"));
     }
+    
+
+    protected String getHost() {
+        return ApplicationProperties.getEngineHost();
+    }
+
+
+    protected String getPort() {
+        return ApplicationProperties.getEnginePort();
+    }
+
 
 
     public List<YExternalClient> getClientApplications() throws IOException {
@@ -120,6 +129,14 @@ public class EngineClient extends AbstractClient {
         else throw new IOException(xml);
     }
 
+    public String getSpecificationDataSchema(YSpecificationID specID) throws IOException {
+        String xml = _ibClient.getSpecificationDataSchema(specID, getHandle());
+        if (successful(xml)) {
+            return xml;
+        }
+        else throw new IOException(StringUtil.unwrap(xml));
+    }
+
 
     public TaskInformation getTaskInformation(WorkItemRecord wir) throws IOException {
         return getTaskInformation(new YSpecificationID(wir), wir.getTaskID());
@@ -156,7 +173,7 @@ public class EngineClient extends AbstractClient {
     }
 
 
-    private boolean successful(String xml) { return _ibClient.successful(xml); }
+    protected boolean successful(String xml) { return _ibClient.successful(xml); }
 
 
     @Override

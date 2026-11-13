@@ -1,19 +1,22 @@
 package org.yawlfoundation.yawl.ui.view;
 
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayout;
 import com.vaadin.flow.component.splitlayout.SplitLayoutVariant;
-import com.vaadin.flow.dom.Element;
-import com.vaadin.flow.server.InputStreamFactory;
-import com.vaadin.flow.server.StreamResource;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import org.jdom2.Document;
+import org.yawlfoundation.yawl.engine.YSpecificationID;
 import org.yawlfoundation.yawl.ui.announce.Announcement;
 import org.yawlfoundation.yawl.ui.service.*;
+import org.yawlfoundation.yawl.ui.util.TNode;
+import org.yawlfoundation.yawl.ui.util.TNodeParser;
 import org.yawlfoundation.yawl.ui.util.UiUtil;
+import org.yawlfoundation.yawl.util.JDOMUtil;
 
-import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -45,10 +48,20 @@ public abstract class AbstractView extends VerticalLayout {
         return Clients.getDocStoreClient();
     }
 
+    protected LogClient getLogClient() {
+        return Clients.getLogClient();
+    }
+
 
     protected SplitLayout createSplitView(Component top, Component bottom) {
+        return createSplitView(top, bottom, SplitLayout.Orientation.VERTICAL);
+    }
+
+    
+    protected SplitLayout createSplitView(Component top, Component bottom,
+                                          SplitLayout.Orientation orientation) {
         SplitLayout splitLayout = new SplitLayout(top, bottom);
-        splitLayout.setOrientation(SplitLayout.Orientation.VERTICAL);
+        splitLayout.setOrientation(orientation);
         splitLayout.setSizeFull();
         splitLayout.addThemeVariants(SplitLayoutVariant.LUMO_SMALL);
         return splitLayout;
@@ -79,24 +92,28 @@ public abstract class AbstractView extends VerticalLayout {
 
 
     protected void downloadFile(String fileName, String content) {
-        InputStreamFactory isFactory = () -> new ByteArrayInputStream(
-                content.getBytes(StandardCharsets.UTF_8));
-        StreamResource resource = new StreamResource(fileName, isFactory);
-        resource.setContentType("text/xml");
-        resource.setCacheTime(0);
-        resource.setHeader("Content-Disposition",
-                "attachment;filename=\"" + fileName + "\"");
+        DownloadHandler handler = event -> {
+            event.setFileName(fileName);
+            event.setContentType("text/xml");
 
-        Anchor downloadAnchor = new Anchor(resource, "");
-        Element element = downloadAnchor.getElement();
-        element.setAttribute("download", true);
-        element.getStyle().set("display", "none");
-        add(downloadAnchor);
+            // Write the content to the output stream
+            try (OutputStream os = event.getOutputStream()) {
+                os.write(content.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                // Handle IO error (logging, etc.)
+            }
+        };
+    }
 
-        // simulate a click & remove anchor after file downloaded
-        element.executeJs("return new Promise(resolve =>{this.click(); " +
-                "setTimeout(() => resolve(true), 150)})", element)
-                .then(jsonValue -> remove(downloadAnchor));
+
+    protected TNode getInternalTypeTree(YSpecificationID specID) throws IOException {
+        String specSchema = getEngineClient().getSpecificationDataSchema(specID);
+        if (specSchema == null || ! specSchema.contains("yawl:")) {  // short circuit
+            return null;
+        }
+        Document doc = JDOMUtil.stringToDocument(specSchema);
+        TNode node = new TNodeParser().parse(doc.getRootElement());
+        return node.hasInternalTypeInTree() ? node : null;
     }
 
 }
